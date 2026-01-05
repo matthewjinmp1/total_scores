@@ -72,77 +72,32 @@ def get_companies():
     companies = conn.execute(query, params).fetchall()
     conn.close()
     
-    # Convert rows to dictionaries
-    # Note: rank and percentile are calculated dynamically on the frontend
+    # Convert rows to dictionaries and map QuickFS metrics from _percentile to _quickfs
+    # QuickFS metrics are stored in all_scores.db with _percentile suffix but frontend expects _quickfs
+    quickfs_metrics_base = [
+        'revenue_5y_cagr', 'revenue_5y_halfway_growth', 'revenue_growth_consistency',
+        'revenue_growth_acceleration', 'operating_margin_growth', 'gross_margin_growth',
+        'operating_margin_consistency', 'gross_margin_consistency', 'share_count_halfway_growth',
+        'ttm_ebit_ppe', 'net_debt_to_ttm_operating_income', 'total_past_return'
+    ]
+    
     result = []
     for row in companies:
         company_dict = dict(row)
+        
+        # Map QuickFS metrics from _percentile suffix to _quickfs suffix (for frontend compatibility)
+        for metric_base in quickfs_metrics_base:
+            percentile_key = f'{metric_base}_percentile'
+            quickfs_key = f'{metric_base}_quickfs'
+            if percentile_key in company_dict:
+                # Use percentile value, or 0.5 if None/NaN
+                value = company_dict[percentile_key]
+                company_dict[quickfs_key] = 0.5 if value is None or pd.isna(value) else value
+            else:
+                # Metric not in database, assign 0.5
+                company_dict[quickfs_key] = 0.5
+        
         result.append(company_dict)
-    
-    # Load QuickFS metrics and calculate percentiles
-    quickfs_db = os.path.join(os.path.dirname(__file__), "quickfs", "metrics.db")
-    if os.path.exists(quickfs_db):
-        import sqlite3 as sqlite3_module
-        
-        conn_quickfs = sqlite3_module.connect(quickfs_db)
-        
-        # Get all QuickFS metrics
-        df_all = pd.read_sql_query("""
-            SELECT * FROM quickfs_metrics
-            WHERE id IN (SELECT MAX(id) FROM quickfs_metrics GROUP BY ticker)
-        """, conn_quickfs)
-        
-        # Ensure ticker column is uppercase and remove duplicates (keep first)
-        if 'ticker' in df_all.columns and len(df_all) > 0:
-            # Convert ticker to string and uppercase
-            ticker_series = df_all['ticker'].astype(str)
-            df_all['ticker'] = ticker_series.str.upper()
-            df_all = df_all.drop_duplicates(subset=['ticker'], keep='first').reset_index(drop=True)
-        
-        # QuickFS metric columns
-        quickfs_metrics = [
-            'revenue_5y_cagr', 'revenue_5y_halfway_growth', 'revenue_growth_consistency',
-            'revenue_growth_acceleration', 'operating_margin_growth', 'gross_margin_growth',
-            'operating_margin_consistency', 'gross_margin_consistency', 'share_count_halfway_growth',
-            'ttm_ebit_ppe', 'net_debt_to_ttm_operating_income', 'total_past_return'
-        ]
-        
-        # Reverse metrics
-        reverse_metrics = [
-            'revenue_growth_consistency', 'operating_margin_consistency', 'gross_margin_consistency',
-            'share_count_halfway_growth', 'net_debt_to_ttm_operating_income'
-        ]
-        
-        # Calculate percentiles for each metric
-        for metric in quickfs_metrics:
-            if metric in df_all.columns:
-                # Get valid metric values with tickers
-                metric_df = df_all[['ticker', metric]].dropna(subset=[metric]).copy()
-                if len(metric_df) > 0:
-                    # Reset index to avoid duplicate index issues
-                    metric_df = metric_df.reset_index(drop=True)
-                    
-                    is_reverse = metric in reverse_metrics
-                    metric_values = metric_df[metric]
-                    ranks = metric_values.rank(method='average', ascending=True)
-                    n_valid = len(metric_values)
-                    percentiles = ranks / n_valid
-                    if is_reverse:
-                        percentiles = 1.0 - percentiles
-                    
-                    # Create a mapping of ticker to percentile
-                    ticker_percentiles = {}
-                    for idx in range(len(metric_df)):
-                        ticker = str(metric_df.iloc[idx]['ticker']).upper()
-                        ticker_percentiles[ticker] = percentiles.iloc[idx]
-                    
-                    # Add percentiles to result
-                    for company in result:
-                        ticker = company['ticker'].upper()
-                        if ticker in ticker_percentiles:
-                            company[f'{metric}_quickfs'] = ticker_percentiles[ticker]
-        
-        conn_quickfs.close()
     
     return jsonify(result)
 
@@ -216,85 +171,25 @@ def get_company(ticker):
                     company_dict[raw_key] = finviz_data[key]
         conn_finviz.close()
     
-    # Get QuickFS metrics (raw values and calculate percentiles on the fly)
-    quickfs_db = os_module.path.join(os_module.path.dirname(__file__), "quickfs", "metrics.db")
-    if os_module.path.exists(quickfs_db):
-        import pandas as pd
-        
-        conn_quickfs = sqlite3_module.connect(quickfs_db)
-        conn_quickfs.row_factory = sqlite3_module.Row
-        
-        # Get most recent QuickFS metrics for this ticker
-        quickfs_row = conn_quickfs.execute("""
-            SELECT * FROM quickfs_metrics 
-            WHERE ticker = ? AND id = (SELECT MAX(id) FROM quickfs_metrics WHERE ticker = ?)
-        """, (ticker_upper, ticker_upper)).fetchone()
-        
-        if quickfs_row:
-            quickfs_data = dict(quickfs_row)
-            
-            # QuickFS metric columns (excluding metadata)
-            quickfs_metrics = [
-                'revenue_5y_cagr', 'revenue_5y_halfway_growth', 'revenue_growth_consistency',
-                'revenue_growth_acceleration', 'operating_margin_growth', 'gross_margin_growth',
-                'operating_margin_consistency', 'gross_margin_consistency', 'share_count_halfway_growth',
-                'ttm_ebit_ppe', 'net_debt_to_ttm_operating_income', 'total_past_return'
-            ]
-            
-            # Reverse metrics (lower is better)
-            reverse_metrics = [
-                'revenue_growth_consistency', 'operating_margin_consistency', 'gross_margin_consistency',
-                'share_count_halfway_growth', 'net_debt_to_ttm_operating_income'
-            ]
-            
-            # Get all QuickFS data to calculate percentiles
-            df_all = pd.read_sql_query("""
-                SELECT * FROM quickfs_metrics
-                WHERE id IN (SELECT MAX(id) FROM quickfs_metrics GROUP BY ticker)
-            """, conn_quickfs)
-            
-            # Ensure ticker column is uppercase and remove duplicates (keep first)
-            if 'ticker' in df_all.columns and len(df_all) > 0:
-                # Convert ticker to string and uppercase
-                ticker_series = df_all['ticker'].astype(str)
-                df_all['ticker'] = ticker_series.str.upper()
-                df_all = df_all.drop_duplicates(subset=['ticker'], keep='first').reset_index(drop=True)
-            
-            # Add raw values and calculate percentiles
-            for metric in quickfs_metrics:
-                if metric in quickfs_data and quickfs_data[metric] is not None:
-                    # Add raw value
-                    company_dict[f'{metric}_quickfs_raw'] = quickfs_data[metric]
-                    
-                    # Calculate percentile if we have data
-                    if metric in df_all.columns:
-                        # Get valid metric values with tickers
-                        metric_df = df_all[['ticker', metric]].dropna(subset=[metric]).copy()
-                        if len(metric_df) > 0:
-                            # Reset index to avoid duplicate index issues
-                            metric_df = metric_df.reset_index(drop=True)
-                            
-                            # Find ticker row
-                            ticker_rows = metric_df[metric_df['ticker'] == ticker_upper]
-                            if len(ticker_rows) > 0:
-                                ticker_value = ticker_rows[metric].iloc[0]
-                                
-                                # Calculate percentile
-                                is_reverse = metric in reverse_metrics
-                                metric_values = metric_df[metric]
-                                ranks = metric_values.rank(method='average', ascending=True)
-                                n_valid = len(metric_values)
-                                percentiles = ranks / n_valid
-                                
-                                if is_reverse:
-                                    percentiles = 1.0 - percentiles
-                                
-                                # Get percentile for this ticker (use iloc with the position in filtered df)
-                                ticker_pos = ticker_rows.index[0]
-                                ticker_percentile = percentiles.iloc[ticker_pos]
-                                company_dict[f'{metric}_quickfs'] = ticker_percentile
-        
-        conn_quickfs.close()
+    # QuickFS metrics are already in all_scores.db with _percentile suffix
+    # Map them to _quickfs suffix for frontend compatibility
+    quickfs_metrics_base = [
+        'revenue_5y_cagr', 'revenue_5y_halfway_growth', 'revenue_growth_consistency',
+        'revenue_growth_acceleration', 'operating_margin_growth', 'gross_margin_growth',
+        'operating_margin_consistency', 'gross_margin_consistency', 'share_count_halfway_growth',
+        'ttm_ebit_ppe', 'net_debt_to_ttm_operating_income', 'total_past_return'
+    ]
+    
+    for metric_base in quickfs_metrics_base:
+        percentile_key = f'{metric_base}_percentile'
+        quickfs_key = f'{metric_base}_quickfs'
+        if percentile_key in company_dict:
+            # Use percentile value, or 0.5 if None/NaN
+            value = company_dict[percentile_key]
+            company_dict[quickfs_key] = 0.5 if value is None or pd.isna(value) else value
+        else:
+            # Metric not in database, assign 0.5
+            company_dict[quickfs_key] = 0.5
     
     return jsonify(company_dict)
 

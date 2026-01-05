@@ -61,6 +61,7 @@ def run_coverage(html=False, verbose=False, show_missing=False, measure_test_tim
         'app.py',
         # Score calculation and database generation (runtime for web app setup)
         'calculate_total_scores.py',
+        'recalculate_all_metrics.py',  # Script to recalculate all metrics
         # Metric viewing and rankings (runtime)
         'view_metric_rankings.py',
         'show_metric_averages.py',
