@@ -101,18 +101,59 @@ class TestCalculateScoresExtended(unittest.TestCase):
         conn_finviz.commit()
         conn_finviz.close()
         
+        # Create QuickFS metrics database
+        self.test_quickfs_db = os.path.join(self.test_dir, 'quickfs_metrics.db')
+        conn_quickfs = sqlite3.connect(self.test_quickfs_db)
+        cursor = conn_quickfs.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS quickfs_metrics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                calculated_at TEXT NOT NULL,
+                revenue_5y_cagr REAL,
+                revenue_5y_halfway_growth REAL,
+                revenue_growth_consistency REAL,
+                revenue_growth_acceleration REAL,
+                operating_margin_growth REAL,
+                gross_margin_growth REAL,
+                operating_margin_consistency REAL,
+                gross_margin_consistency REAL,
+                share_count_halfway_growth REAL,
+                ttm_ebit_ppe REAL,
+                net_debt_to_ttm_operating_income REAL,
+                total_past_return REAL,
+                error TEXT
+            )
+        ''')
+        # Add test data for overlapping tickers
+        cursor.execute('''
+            INSERT INTO quickfs_metrics 
+            (ticker, calculated_at, revenue_5y_cagr, revenue_5y_halfway_growth)
+            VALUES (?, ?, ?, ?)
+        ''', ('AAPL', '2024-01-01', 10.5, 1.2))
+        cursor.execute('''
+            INSERT INTO quickfs_metrics 
+            (ticker, calculated_at, revenue_5y_cagr, revenue_5y_halfway_growth)
+            VALUES (?, ?, ?, ?)
+        ''', ('MSFT', '2024-01-01', 12.3, 1.3))
+        conn_quickfs.commit()
+        conn_quickfs.close()
+        
         # Patch database paths
         import calculate_total_scores
         self.original_ai_path = calculate_total_scores.AI_SCORES_DB
         self.original_finviz_path = calculate_total_scores.FINVIZ_DB
+        self.original_quickfs_path = calculate_total_scores.QUICKFS_METRICS_DB
         calculate_total_scores.AI_SCORES_DB = self.test_ai_db
         calculate_total_scores.FINVIZ_DB = self.test_finviz_db
+        calculate_total_scores.QUICKFS_METRICS_DB = self.test_quickfs_db
     
     def tearDown(self):
         """Clean up test fixtures."""
         import calculate_total_scores
         calculate_total_scores.AI_SCORES_DB = self.original_ai_path
         calculate_total_scores.FINVIZ_DB = self.original_finviz_path
+        calculate_total_scores.QUICKFS_METRICS_DB = self.original_quickfs_path
         shutil.rmtree(self.test_dir)
     
     def test_get_overlapping_companies(self):
