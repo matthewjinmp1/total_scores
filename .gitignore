@@ -1,0 +1,8 @@
+# Ignore config file with API key
+config.json
+
+# Ignore database files
+data.db
+quickfs/data.db
+*.db
+

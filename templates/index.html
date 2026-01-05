@@ -1,0 +1,1481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Total Scores Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            height: 100%;
+            min-height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            background-repeat: repeat;
+            background-size: cover;
+            overflow-x: hidden;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            background-repeat: repeat;
+            background-size: cover;
+            padding: 20px;
+            padding-bottom: 40px;
+            color: #333;
+            margin: 0;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* Fixed background layer to cover overscroll */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            z-index: -1;
+            pointer-events: none;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+
+        .controls {
+            padding: 25px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .search-box {
+            flex: 1;
+            min-width: 250px;
+            position: relative;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 40px 12px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+
+        .search-box input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+        }
+
+        .sort-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .sort-controls select, .sort-controls button {
+            padding: 10px 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 1em;
+            background: white;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .sort-controls select:focus, .sort-controls button:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .sort-controls button {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .sort-controls button:hover {
+            background: #5568d3;
+        }
+
+        .stats-bar {
+            padding: 20px 25px;
+            background: #f8f9fa;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 20px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .stat-card {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .table-container {
+            width: 100%;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: #667eea;
+            color: white;
+            z-index: 100;
+        }
+
+        th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background: #5568d3;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.5;
+            font-size: 0.8em;
+            margin-left: 5px;
+        }
+
+        th.sortable.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        th.sortable.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #e9ecef;
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #f8f9fa;
+            cursor: pointer;
+        }
+
+        td {
+            padding: 15px;
+            white-space: nowrap;
+        }
+
+        .ticker {
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .score {
+            font-weight: normal;
+            font-size: 1.1em;
+        }
+
+        .score-high {
+            color: #28a745;
+        }
+
+        .score-medium {
+            color: #ffc107;
+        }
+
+        .score-low {
+            color: #dc3545;
+        }
+
+        .percentile-bold {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            overflow-y: auto;
+        }
+
+        .modal-content {
+            background: white;
+            margin: 50px auto;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 800px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            animation: slideDown 0.3s;
+        }
+
+        @keyframes slideDown {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .modal-header h2 {
+            color: #667eea;
+        }
+
+        .close {
+            font-size: 2em;
+            cursor: pointer;
+            color: #999;
+            line-height: 1;
+        }
+
+        .close:hover {
+            color: #333;
+        }
+
+        .total-score-container {
+            text-align: center;
+            padding: 25px;
+            margin-bottom: 25px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 12px;
+            color: white;
+        }
+
+        .total-score-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+            margin-bottom: 10px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .total-score-value {
+            font-size: 3em;
+            font-weight: bold;
+        }
+
+        .metric-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .metric-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+        }
+
+        .metric-label {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #222;
+            margin-bottom: 15px;
+            letter-spacing: 0.02em;
+        }
+
+        .metric-fields {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            justify-content: space-between;
+        }
+
+        .metric-field {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        .metric-field-label {
+            font-size: 0.85em;
+            color: #666;
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .metric-field-value {
+            font-size: 0.95em;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .metric-field.percentile .metric-field-value {
+            font-size: 1.3em;
+            font-weight: 700;
+        }
+
+        .metrics-selector {
+            padding: 20px 25px;
+            background: #f8f9fa;
+            border-bottom: 2px solid #e9ecef;
+        }
+
+        .metrics-selector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .metrics-selector h3 {
+            color: #333;
+            font-size: 1.1em;
+            margin: 0;
+        }
+
+        .metrics-selector-buttons {
+            display: flex;
+            gap: 10px;
+        }
+
+        .metrics-selector-button {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #667eea;
+            color: #667eea;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .metrics-selector-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .metrics-toggle-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .metric-toggle {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            user-select: none;
+        }
+        
+        .metric-toggle input[type="checkbox"] {
+            pointer-events: none;
+        }
+
+        .metric-toggle:hover {
+            background: #e9ecef;
+        }
+
+        .metric-toggle.active {
+            background: #667eea;
+            color: white;
+            border-color: #5568d3;
+        }
+
+        .metric-toggle input[type="checkbox"] {
+            margin-right: 8px;
+            cursor: pointer;
+        }
+
+        .metric-toggle-label {
+            font-size: 0.9em;
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .config-selector {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+        }
+
+        .config-selector-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .config-selector h4 {
+            color: #333;
+            font-size: 1em;
+            margin: 0;
+        }
+
+        .config-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .config-select {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9em;
+            min-width: 150px;
+        }
+
+        .config-input {
+            padding: 6px 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 0.9em;
+            min-width: 150px;
+        }
+
+        .config-button {
+            padding: 6px 12px;
+            background: white;
+            border: 1px solid #667eea;
+            color: #667eea;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+
+        .config-button:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .config-button.delete {
+            border-color: #dc3545;
+            color: #dc3545;
+        }
+
+        .config-button.delete:hover {
+            background: #dc3545;
+            color: white;
+        }
+
+        .config-button.update {
+            border-color: #28a745;
+            color: #28a745;
+        }
+
+        .config-button.update:hover {
+            background: #28a745;
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📊 Stock Total Scores Dashboard</h1>
+            <p>Composite scores based on AI analysis and financial metrics - customize which metrics contribute to the total score</p>
+        </div>
+
+        <div class="metrics-selector">
+            <div class="metrics-selector-header">
+                <h3>Select Metrics for Total Score Calculation</h3>
+                <div class="metrics-selector-buttons">
+                    <button class="metrics-selector-button" id="toggleAllButton" onclick="toggleAllMetrics()">Select All</button>
+                </div>
+            </div>
+            <div class="metrics-toggle-grid" id="metricsToggleGrid">
+                <!-- Metrics toggles will be populated here -->
+            </div>
+            
+            <div class="config-selector">
+                <div class="config-selector-header">
+                    <h4>Save & Load Metric Configurations</h4>
+                </div>
+                <div class="config-controls">
+                    <select id="configSelect" class="config-select" onchange="loadConfiguration()">
+                        <option value="">-- Select Configuration --</option>
+                    </select>
+                    <input type="text" id="configNameInput" class="config-input" placeholder="Configuration name...">
+                    <button class="config-button" onclick="saveConfiguration()">Save Current</button>
+                    <button class="config-button update" id="updateButton" onclick="updateConfiguration()" style="display: none;">Update Selected</button>
+                    <button class="config-button delete" onclick="deleteConfiguration()">Delete Selected</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="Search by ticker or company name...">
+                <span class="search-icon">🔍</span>
+            </div>
+        </div>
+
+        <div class="table-container">
+            <table id="companiesTable">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th class="sortable" data-sort="ticker">Ticker</th>
+                        <th class="sortable" data-sort="company_name">Company</th>
+                        <th class="sortable" data-sort="total_score" id="sortTotalScore">Total Score</th>
+                        <th class="sortable" data-sort="percentile" id="sortPercentile">Percentile</th>
+                    </tr>
+                </thead>
+                <tbody id="companiesBody">
+                    <tr>
+                        <td colspan="5" class="loading">
+                            <div class="spinner"></div>
+                            Loading companies...
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal for company details -->
+    <div id="companyModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modalTitle">Company Details</h2>
+                <span class="close" onclick="closeModal()">&times;</span>
+            </div>
+            <div id="modalBody"></div>
+        </div>
+    </div>
+
+    <script>
+        let companies = [];
+        let allCompanies = []; // Store all companies for rank/percentile calculation
+        let currentSort = 'total_score';
+        let currentOrder = 'desc';
+        let sortDirection = true;
+        
+        // All available metrics (AI and Finviz)
+        const allMetrics = [
+            // AI Score Metrics
+            { key: 'moat_score_normalized', label: 'Moat Score' },
+            { key: 'barriers_score_normalized', label: 'Barriers Score' },
+            { key: 'brand_strength_normalized', label: 'Brand Strength' },
+            { key: 'pricing_power_normalized', label: 'Pricing Power' },
+            { key: 'switching_cost_normalized', label: 'Switching Cost' },
+            { key: 'innovativeness_score_normalized', label: 'Innovativeness' },
+            { key: 'growth_opportunity_normalized', label: 'Growth Opportunity' },
+            { key: 'riskiness_score_normalized', label: 'Riskiness Score' },
+            { key: 'disruption_risk_normalized', label: 'Disruption Risk' },
+            { key: 'competition_intensity_normalized', label: 'Competition Intensity' },
+            { key: 'network_effect_normalized', label: 'Network Effect' },
+            { key: 'product_differentiation_normalized', label: 'Product Differentiation' },
+            { key: 'product_quality_score_normalized', label: 'Product Quality' },
+            { key: 'ambition_score_normalized', label: 'Ambition Score' },
+            { key: 'bargaining_power_of_customers_normalized', label: 'Bargaining Power (Customers)' },
+            { key: 'bargaining_power_of_suppliers_normalized', label: 'Bargaining Power (Suppliers)' },
+            { key: 'culture_employee_satisfaction_score_normalized', label: 'Culture & Employee Satisfaction' },
+            { key: 'trailblazer_score_normalized', label: 'Trailblazer Score' },
+            { key: 'management_quality_score_normalized', label: 'Management Quality' },
+            { key: 'ai_knowledge_score_normalized', label: 'AI Knowledge' },
+            { key: 'size_well_known_score_normalized', label: 'Size & Well-Known Score' },
+            { key: 'ethical_healthy_environmental_score_normalized', label: 'Ethical & Environmental' },
+            { key: 'long_term_orientation_score_normalized', label: 'Long-Term Orientation' },
+            { key: 'execution_ability_score_normalized', label: 'Execution Ability' },
+            // Finviz Metrics
+            { key: 'short_interest_percent_percentile', label: 'Short Interest' },
+            { key: 'forward_pe_percentile', label: 'Forward P/E' },
+            { key: 'eps_growth_next_5y_percentile', label: 'EPS Growth (5Y)' },
+            { key: 'insider_ownership_percentile', label: 'Insider Ownership' },
+            { key: 'roa_percentile', label: 'ROA' },
+            { key: 'roic_percentile', label: 'ROIC' },
+            { key: 'gross_margin_percentile', label: 'Gross Margin' },
+            { key: 'operating_margin_percentile', label: 'Operating Margin' },
+            { key: 'perf_10y_percentile', label: 'Performance (10Y)' },
+            { key: 'recommendation_score_percentile', label: 'Analyst Recommendation' },
+            { key: 'price_move_percent_percentile', label: 'Price Move to Target' },
+            // QuickFS Metrics
+            { key: 'revenue_5y_cagr_quickfs', label: 'Revenue 5Y CAGR' },
+            { key: 'revenue_5y_halfway_growth_quickfs', label: 'Revenue 5Y Halfway Growth' },
+            { key: 'revenue_growth_consistency_quickfs', label: 'Revenue Growth Consistency' },
+            { key: 'revenue_growth_acceleration_quickfs', label: 'Revenue Growth Acceleration' },
+            { key: 'operating_margin_growth_quickfs', label: 'Operating Margin Growth' },
+            { key: 'gross_margin_growth_quickfs', label: 'Gross Margin Growth' },
+            { key: 'operating_margin_consistency_quickfs', label: 'Operating Margin Consistency' },
+            { key: 'gross_margin_consistency_quickfs', label: 'Gross Margin Consistency' },
+            { key: 'share_count_halfway_growth_quickfs', label: 'Share Count Halfway Growth' },
+            { key: 'ttm_ebit_ppe_quickfs', label: 'TTM EBIT/PPE' },
+            { key: 'net_debt_to_ttm_operating_income_quickfs', label: 'Net Debt to TTM Operating Income' },
+            { key: 'total_past_return_quickfs', label: 'Total Past Return' }
+        ];
+        
+        // Set of enabled metrics (all enabled by default)
+        let enabledMetrics = new Set(allMetrics.map(m => m.key));
+        
+        // Configuration management functions
+        const CONFIG_STORAGE_KEY = 'metricConfigurations';
+        
+        function getSavedConfigurations() {
+            const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+            return saved ? JSON.parse(saved) : {};
+        }
+        
+        function saveConfigurations(configs) {
+            localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(configs));
+        }
+        
+        function updateConfigDropdown() {
+            const select = document.getElementById('configSelect');
+            const configs = getSavedConfigurations();
+            const configNames = Object.keys(configs);
+            
+            // Clear existing options except the default
+            select.innerHTML = '<option value="">-- Select Configuration --</option>';
+            
+            // Add saved configurations
+            configNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                select.appendChild(option);
+            });
+        }
+        
+        function saveConfiguration() {
+            const nameInput = document.getElementById('configNameInput');
+            const configName = nameInput.value.trim();
+            
+            if (!configName) {
+                alert('Please enter a configuration name');
+                return;
+            }
+            
+            // Get current enabled metrics
+            const currentConfig = Array.from(enabledMetrics);
+            
+            // Save to localStorage
+            const configs = getSavedConfigurations();
+            configs[configName] = currentConfig;
+            saveConfigurations(configs);
+            
+            // Update dropdown
+            updateConfigDropdown();
+            
+            // Select the newly saved configuration
+            document.getElementById('configSelect').value = configName;
+            
+            // Clear input
+            nameInput.value = '';
+            
+            alert(`Configuration "${configName}" saved successfully!`);
+        }
+        
+        function loadConfiguration() {
+            const select = document.getElementById('configSelect');
+            const configName = select.value;
+            const updateButton = document.getElementById('updateButton');
+            
+            // Show/hide Update button based on selection
+            if (configName) {
+                updateButton.style.display = 'inline-block';
+            } else {
+                updateButton.style.display = 'none';
+            }
+            
+            if (!configName) {
+                return;
+            }
+            
+            const configs = getSavedConfigurations();
+            const savedMetrics = configs[configName];
+            
+            if (!savedMetrics || !Array.isArray(savedMetrics)) {
+                alert('Configuration not found or invalid');
+                return;
+            }
+            
+            // Clear current selection
+            enabledMetrics.clear();
+            
+            // Load saved metrics
+            allMetrics.forEach(metric => {
+                const checkbox = document.getElementById(`metric-${metric.key}`);
+                const toggle = checkbox.closest('.metric-toggle');
+                
+                if (savedMetrics.includes(metric.key)) {
+                    checkbox.checked = true;
+                    enabledMetrics.add(metric.key);
+                    toggle.classList.add('active');
+                } else {
+                    checkbox.checked = false;
+                    toggle.classList.remove('active');
+                }
+            });
+            
+            // Update toggle all button text
+            updateToggleAllButtonText();
+            
+            // Reset sort to total_score descending when loading configuration
+            currentSort = 'total_score';
+            currentOrder = 'desc';
+            
+            // Update table
+            renderTable();
+        }
+        
+        function updateConfiguration() {
+            const select = document.getElementById('configSelect');
+            const configName = select.value;
+            
+            if (!configName) {
+                alert('Please select a configuration to update');
+                return;
+            }
+            
+            // Get current enabled metrics
+            const currentConfig = Array.from(enabledMetrics);
+            
+            // Save to localStorage
+            const configs = getSavedConfigurations();
+            configs[configName] = currentConfig;
+            saveConfigurations(configs);
+            
+            // Update dropdown (in case the name was changed somehow)
+            updateConfigDropdown();
+            
+            // Keep the same configuration selected
+            document.getElementById('configSelect').value = configName;
+            
+            alert(`Configuration "${configName}" updated successfully!`);
+        }
+        
+        function deleteConfiguration() {
+            const select = document.getElementById('configSelect');
+            const configName = select.value;
+            
+            if (!configName) {
+                alert('Please select a configuration to delete');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete the configuration "${configName}"?`)) {
+                return;
+            }
+            
+            const configs = getSavedConfigurations();
+            delete configs[configName];
+            saveConfigurations(configs);
+            
+            // Update dropdown
+            updateConfigDropdown();
+            
+            // Clear selection
+            select.value = '';
+            
+            alert(`Configuration "${configName}" deleted successfully!`);
+        }
+        
+        // Debounce render calls to prevent lag during rapid clicks
+        let renderTimeout = null;
+        function debouncedRenderTable() {
+            if (renderTimeout) {
+                clearTimeout(renderTimeout);
+            }
+            renderTimeout = setTimeout(() => {
+                requestAnimationFrame(() => {
+                    renderTable();
+                });
+                renderTimeout = null;
+            }, 50); // Reduced to 50ms for faster response
+        }
+
+        // Load companies
+        async function loadCompanies() {
+            try {
+                const search = document.getElementById('searchInput').value.trim();
+                const url = `/api/companies?sort=${currentSort}&order=${currentOrder}${search ? '&search=' + encodeURIComponent(search) : ''}`;
+                
+                const response = await fetch(url);
+                companies = await response.json();
+                
+                // Load all companies (without search) for rank/percentile calculation
+                if (allCompanies.length === 0 || search === '') {
+                    const allResponse = await fetch(`/api/companies?sort=total_score&order=desc`);
+                    allCompanies = await allResponse.json();
+                }
+                
+                // Check QuickFS metrics availability
+                checkQuickFSMetricsAvailability();
+                
+                renderTable();
+            } catch (error) {
+                console.error('Error loading companies:', error);
+                document.getElementById('companiesBody').innerHTML = 
+                    '<tr><td colspan="5" style="text-align:center;padding:50px;color:red;">Error loading data. Please refresh the page.</td></tr>';
+            }
+        }
+
+        // Calculate total score based on enabled metrics
+        function calculateDynamicTotalScore(company) {
+            const values = [];
+            const missingMetrics = [];
+            
+            enabledMetrics.forEach(metricKey => {
+                const value = company[metricKey];
+                // Check if value exists and is a valid number
+                if (value !== null && value !== undefined && !isNaN(value) && isFinite(value)) {
+                    values.push(value);
+                } else if (metricKey.includes('_quickfs')) {
+                    // Track missing QuickFS metrics for debugging
+                    missingMetrics.push(metricKey);
+                }
+            });
+            
+            // Log warning if QuickFS metrics are selected but missing (only once per render)
+            if (missingMetrics.length > 0 && !window.quickfsWarningShown) {
+                console.warn('Some selected QuickFS metrics are missing from the data:', missingMetrics);
+                console.warn('This usually means QuickFS metrics haven\'t been calculated yet. Run quickfs/calculate_all_metrics.py to generate them.');
+                window.quickfsWarningShown = true;
+            }
+            
+            if (values.length === 0) return 0;
+            return values.reduce((sum, val) => sum + val, 0) / values.length;
+        }
+
+        // Render table
+        function renderTable() {
+            // Reset warning flag on each render
+            window.quickfsWarningShown = false;
+            
+            const tbody = document.getElementById('companiesBody');
+            
+            if (companies.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:50px;">No companies found.</td></tr>';
+                return;
+            }
+
+            // Recalculate total scores based on enabled metrics for ALL companies (for rank/percentile)
+            const allCompaniesWithScores = allCompanies.map(company => ({
+                ...company,
+                total_score: calculateDynamicTotalScore(company)
+            }));
+            
+            // Recalculate total scores for filtered companies
+            const companiesWithScores = companies.map(company => ({
+                ...company,
+                total_score: calculateDynamicTotalScore(company)
+            }));
+
+            // Calculate rank and percentile based on ALL companies (using dynamic total_score)
+            // Sort all companies by total_score descending
+            const sortedAll = [...allCompaniesWithScores].sort((a, b) => b.total_score - a.total_score);
+            
+            // Calculate rank and percentile for all companies
+            const rankMap = {};
+            const percentileMap = {};
+            sortedAll.forEach((company, index) => {
+                const ticker = company.ticker.toUpperCase();
+                rankMap[ticker] = index + 1;
+                // Percentile: rank 1 = 100%, rank n = (n - rank) / n * 100
+                percentileMap[ticker] = ((sortedAll.length - index) / sortedAll.length) * 100;
+            });
+
+            // Sort companies based on current sort settings
+            let sortedCompanies = [...companiesWithScores];
+            if (currentSort === 'total_score') {
+                sortedCompanies.sort((a, b) => currentOrder === 'desc' ? b.total_score - a.total_score : a.total_score - b.total_score);
+            } else if (currentSort === 'ticker') {
+                sortedCompanies.sort((a, b) => currentOrder === 'desc' ? b.ticker.localeCompare(a.ticker) : a.ticker.localeCompare(b.ticker));
+            } else if (currentSort === 'company_name') {
+                sortedCompanies.sort((a, b) => {
+                    const nameA = a.company_name || '';
+                    const nameB = b.company_name || '';
+                    return currentOrder === 'desc' ? nameB.localeCompare(nameA) : nameA.localeCompare(nameB);
+                });
+            } else if (currentSort === 'metrics_count') {
+                sortedCompanies.sort((a, b) => currentOrder === 'desc' ? (b.metrics_count || 0) - (a.metrics_count || 0) : (a.metrics_count || 0) - (b.metrics_count || 0));
+            } else if (currentSort === 'percentile') {
+                sortedCompanies.sort((a, b) => {
+                    const tickerA = a.ticker.toUpperCase();
+                    const tickerB = b.ticker.toUpperCase();
+                    const percentileA = percentileMap[tickerA] || 0;
+                    const percentileB = percentileMap[tickerB] || 0;
+                    return currentOrder === 'desc' ? percentileB - percentileA : percentileA - percentileB;
+                });
+            } else {
+                // Default to total_score descending
+                sortedCompanies.sort((a, b) => b.total_score - a.total_score);
+            }
+
+            // Update sort indicators
+            document.querySelectorAll('.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+                if (th.dataset.sort === currentSort) {
+                    th.classList.add(currentOrder === 'desc' ? 'sort-desc' : 'sort-asc');
+                }
+            });
+
+            // Use sortedCompanies for rendering
+            // Use rank and percentile calculated from ALL companies based on dynamic total_score
+            tbody.innerHTML = sortedCompanies.map((company, index) => {
+                const ticker = company.ticker.toUpperCase();
+                // Use rank calculated from all companies based on dynamic total_score
+                const overallRank = rankMap[ticker] || (index + 1);
+                // Use percentile calculated from all companies based on dynamic total_score
+                const overallPercentile = percentileMap[ticker] || 0;
+                const scorePercent = Math.round(company.total_score * 100);
+                const percentileRounded = Math.round(overallPercentile);
+                return `
+                    <tr onclick="showCompanyDetails('${company.ticker}')">
+                        <td>${overallRank}</td>
+                        <td class="ticker">${company.ticker}</td>
+                        <td>${company.company_name || '-'}</td>
+                        <td class="score">${scorePercent}</td>
+                        <td class="percentile-bold"><strong>${percentileRounded}</strong></td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function getScoreClass(score) {
+            if (score >= 0.7) return 'score-high';
+            if (score >= 0.6) return 'score-medium';
+            return 'score-low';
+        }
+
+        // Show company details
+        async function showCompanyDetails(ticker) {
+            try {
+                const response = await fetch(`/api/company/${ticker}`);
+                const company = await response.json();
+                
+                if (company.error) {
+                    alert(company.error);
+                    return;
+                }
+
+                document.getElementById('modalTitle').textContent = `${company.ticker} - ${company.company_name}`;
+                
+                // Calculate dynamic total score based on enabled metrics
+                const totalScore = calculateDynamicTotalScore(company);
+                
+                // Get all available metrics, then filter to only show enabled ones
+                const allAvailableMetrics = [
+                    // AI Score Metrics (Percentiles)
+                    { label: 'Moat Percentile', value: company.moat_score_normalized, key: 'moat_score_normalized' },
+                    { label: 'Barriers Percentile', value: company.barriers_score_normalized, key: 'barriers_score_normalized' },
+                    { label: 'Brand Strength Percentile', value: company.brand_strength_normalized, key: 'brand_strength_normalized' },
+                    { label: 'Pricing Power Percentile', value: company.pricing_power_normalized, key: 'pricing_power_normalized' },
+                    { label: 'Switching Cost Percentile', value: company.switching_cost_normalized, key: 'switching_cost_normalized' },
+                    { label: 'Innovativeness Percentile', value: company.innovativeness_score_normalized, key: 'innovativeness_score_normalized' },
+                    { label: 'Growth Opportunity Percentile', value: company.growth_opportunity_normalized, key: 'growth_opportunity_normalized' },
+                    { label: 'Riskiness Percentile', value: company.riskiness_score_normalized, key: 'riskiness_score_normalized' },
+                    { label: 'Disruption Risk Percentile', value: company.disruption_risk_normalized, key: 'disruption_risk_normalized' },
+                    { label: 'Competition Intensity Percentile', value: company.competition_intensity_normalized, key: 'competition_intensity_normalized' },
+                    { label: 'Network Effect Percentile', value: company.network_effect_normalized, key: 'network_effect_normalized' },
+                    { label: 'Product Differentiation Percentile', value: company.product_differentiation_normalized, key: 'product_differentiation_normalized' },
+                    { label: 'Product Quality Percentile', value: company.product_quality_score_normalized, key: 'product_quality_score_normalized' },
+                    { label: 'Ambition Percentile', value: company.ambition_score_normalized, key: 'ambition_score_normalized' },
+                    { label: 'Bargaining Power (Customers) Percentile', value: company.bargaining_power_of_customers_normalized, key: 'bargaining_power_of_customers_normalized' },
+                    { label: 'Bargaining Power (Suppliers) Percentile', value: company.bargaining_power_of_suppliers_normalized, key: 'bargaining_power_of_suppliers_normalized' },
+                    { label: 'Culture & Employee Satisfaction Percentile', value: company.culture_employee_satisfaction_score_normalized, key: 'culture_employee_satisfaction_score_normalized' },
+                    { label: 'Trailblazer Percentile', value: company.trailblazer_score_normalized, key: 'trailblazer_score_normalized' },
+                    { label: 'Management Quality Percentile', value: company.management_quality_score_normalized, key: 'management_quality_score_normalized' },
+                    { label: 'AI Knowledge Percentile', value: company.ai_knowledge_score_normalized, key: 'ai_knowledge_score_normalized' },
+                    { label: 'Size & Well-Known Percentile', value: company.size_well_known_score_normalized, key: 'size_well_known_score_normalized' },
+                    { label: 'Ethical & Environmental Percentile', value: company.ethical_healthy_environmental_score_normalized, key: 'ethical_healthy_environmental_score_normalized' },
+                    { label: 'Long-Term Orientation Percentile', value: company.long_term_orientation_score_normalized, key: 'long_term_orientation_score_normalized' },
+                    { label: 'Execution Ability Percentile', value: company.execution_ability_score_normalized, key: 'execution_ability_score_normalized' },
+                    // Finviz Metrics (Percentiles)
+                    { label: 'Short Interest Percentile', value: company.short_interest_percent_percentile, key: 'short_interest_percent_percentile' },
+                    { label: 'Forward P/E Percentile', value: company.forward_pe_percentile, key: 'forward_pe_percentile' },
+                    { label: 'EPS Growth (5Y) Percentile', value: company.eps_growth_next_5y_percentile, key: 'eps_growth_next_5y_percentile' },
+                    { label: 'Insider Ownership Percentile', value: company.insider_ownership_percentile, key: 'insider_ownership_percentile' },
+                    { label: 'ROA Percentile', value: company.roa_percentile, key: 'roa_percentile' },
+                    { label: 'ROIC Percentile', value: company.roic_percentile, key: 'roic_percentile' },
+                    { label: 'Gross Margin Percentile', value: company.gross_margin_percentile, key: 'gross_margin_percentile' },
+                    { label: 'Operating Margin Percentile', value: company.operating_margin_percentile, key: 'operating_margin_percentile' },
+                    { label: 'Performance (10Y) Percentile', value: company.perf_10y_percentile, key: 'perf_10y_percentile' },
+                    { label: 'Analyst Recommendation Percentile', value: company.recommendation_score_percentile, key: 'recommendation_score_percentile' },
+                    { label: 'Price Move to Target Percentile', value: company.price_move_percent_percentile, key: 'price_move_percent_percentile' },
+                    // QuickFS Metrics (Percentiles)
+                    { label: 'Revenue 5Y CAGR Percentile', value: company.revenue_5y_cagr_quickfs, key: 'revenue_5y_cagr_quickfs' },
+                    { label: 'Revenue 5Y Halfway Growth Percentile', value: company.revenue_5y_halfway_growth_quickfs, key: 'revenue_5y_halfway_growth_quickfs' },
+                    { label: 'Revenue Growth Consistency Percentile', value: company.revenue_growth_consistency_quickfs, key: 'revenue_growth_consistency_quickfs' },
+                    { label: 'Revenue Growth Acceleration Percentile', value: company.revenue_growth_acceleration_quickfs, key: 'revenue_growth_acceleration_quickfs' },
+                    { label: 'Operating Margin Growth Percentile', value: company.operating_margin_growth_quickfs, key: 'operating_margin_growth_quickfs' },
+                    { label: 'Gross Margin Growth Percentile', value: company.gross_margin_growth_quickfs, key: 'gross_margin_growth_quickfs' },
+                    { label: 'Operating Margin Consistency Percentile', value: company.operating_margin_consistency_quickfs, key: 'operating_margin_consistency_quickfs' },
+                    { label: 'Gross Margin Consistency Percentile', value: company.gross_margin_consistency_quickfs, key: 'gross_margin_consistency_quickfs' },
+                    { label: 'Share Count Halfway Growth Percentile', value: company.share_count_halfway_growth_quickfs, key: 'share_count_halfway_growth_quickfs' },
+                    { label: 'TTM EBIT/PPE Percentile', value: company.ttm_ebit_ppe_quickfs, key: 'ttm_ebit_ppe_quickfs' },
+                    { label: 'Net Debt to TTM Operating Income Percentile', value: company.net_debt_to_ttm_operating_income_quickfs, key: 'net_debt_to_ttm_operating_income_quickfs' },
+                    { label: 'Total Past Return Percentile', value: company.total_past_return_quickfs, key: 'total_past_return_quickfs' },
+                ];
+                
+                // Filter to only show enabled metrics that have values
+                const metrics = allAvailableMetrics
+                    .filter(m => 
+                        enabledMetrics.has(m.key) && m.value !== null && m.value !== undefined
+                    )
+                    .sort((a, b) => {
+                        // Sort by percentile value (descending - highest first)
+                        const valA = typeof a.value === 'number' ? a.value : 0;
+                        const valB = typeof b.value === 'number' ? b.value : 0;
+                        return valB - valA;
+                    });
+
+                // Create Total Score display
+                const totalScoreHtml = `
+                    <div class="total-score-container">
+                        <div class="total-score-label">Total Score</div>
+                        <div class="total-score-value">${typeof totalScore === 'number' ? Math.round(totalScore * 100) + '%' : totalScore}</div>
+                    </div>
+                `;
+
+                // Helper function to get raw value key
+                function getRawValueKey(key) {
+                    // Convert percentile/normalized keys to raw value keys
+                    if (key.includes('_normalized')) {
+                        const baseKey = key.replace('_normalized', '');
+                        return baseKey + '_raw';
+                    } else if (key.includes('_percentile')) {
+                        const baseKey = key.replace('_percentile', '');
+                        // Map Finviz keys
+                        const finvizMap = {
+                            'short_interest_percent_percentile': 'short_interest_percent_raw',
+                            'forward_pe_percentile': 'forward_pe_raw',
+                            'eps_growth_next_5y_percentile': 'eps_growth_next_5y_raw',
+                            'insider_ownership_percentile': 'insider_ownership_raw',
+                            'roa_percentile': 'roa_raw',
+                            'roic_percentile': 'roic_raw',
+                            'gross_margin_percentile': 'gross_margin_raw',
+                            'operating_margin_percentile': 'operating_margin_raw',
+                            'perf_10y_percentile': 'perf_10y_raw',
+                            'recommendation_score_percentile': 'recommendation_raw',
+                            'price_move_percent_percentile': 'price_move_percent_raw'
+                        };
+                        if (finvizMap[key]) {
+                            return finvizMap[key];
+                        }
+                    } else if (key.includes('_quickfs')) {
+                        // QuickFS metrics: convert _quickfs key to _quickfs_raw
+                        return key.replace('_quickfs', '_quickfs_raw');
+                    }
+                    return key + '_raw';
+                }
+                
+                // Helper function to format raw value
+                function formatRawValue(rawValue, metricKey) {
+                    if (rawValue === null || rawValue === undefined) return 'N/A';
+                    
+                    // QuickFS metrics formatting
+                    if (metricKey.includes('_quickfs')) {
+                        if (metricKey.includes('ebit_ppe')) {
+                            // EBIT/PPE ratio
+                            return typeof rawValue === 'number' ? rawValue.toFixed(4) : rawValue;
+                        } else if (metricKey.includes('net_debt_to_ttm')) {
+                            // Net debt ratio
+                            if (typeof rawValue === 'number' && rawValue >= 1000) {
+                                return rawValue.toFixed(0) + ' (neg income)';
+                            }
+                            return typeof rawValue === 'number' ? rawValue.toFixed(4) : rawValue;
+                        } else if (metricKey.includes('cagr') || metricKey.includes('total_past_return')) {
+                            // CAGR and total return as percentage
+                            return typeof rawValue === 'number' ? (rawValue * 100).toFixed(2) + '%' : rawValue;
+                        } else if (metricKey.includes('consistency') && !metricKey.includes('margin')) {
+                            // Revenue growth consistency (standard deviation) as percentage
+                            return typeof rawValue === 'number' ? (rawValue * 100).toFixed(2) + '%' : rawValue;
+                        } else if (metricKey.includes('margin_consistency')) {
+                            // Margin consistency (standard deviation) as percentage points
+                            return typeof rawValue === 'number' ? (rawValue * 100).toFixed(2) + ' pp' : rawValue;
+                        } else if (metricKey.includes('acceleration') || metricKey.includes('halfway_growth')) {
+                            // Acceleration and halfway growth as ratio
+                            return typeof rawValue === 'number' ? rawValue.toFixed(4) + 'x' : rawValue;
+                        } else if (metricKey.includes('margin_growth')) {
+                            // Margin growth as percentage points
+                            return typeof rawValue === 'number' ? (rawValue * 100).toFixed(2) + ' pp' : rawValue;
+                        }
+                    }
+                    
+                    // P/E ratio - must check BEFORE percentage check
+                    if (metricKey.includes('forward_pe') || metricKey.includes('pe_percentile')) {
+                        return typeof rawValue === 'number' ? rawValue.toFixed(2) : rawValue;
+                    }
+                    
+                    // Recommendation: convert score to text
+                    if (metricKey === 'recommendation_score_percentile' || metricKey.includes('recommendation')) {
+                        const recMap = {1.0: 'Strong Buy', 2.0: 'Buy', 3.0: 'Hold', 4.0: 'Sell', 5.0: 'Strong Sell'};
+                        return recMap[rawValue] || rawValue;
+                    }
+                    
+                    // Percentages
+                    if (metricKey.includes('percent') || metricKey.includes('margin') || 
+                        metricKey.includes('roa') || metricKey.includes('roic') || 
+                        metricKey.includes('growth') || metricKey.includes('ownership') ||
+                        metricKey.includes('perf') || metricKey.includes('price_move')) {
+                        return typeof rawValue === 'number' ? rawValue.toFixed(2) + '%' : rawValue;
+                    }
+                    
+                    // AI scores (0-10 scale)
+                    return typeof rawValue === 'number' ? rawValue.toFixed(1) : rawValue;
+                }
+                
+                const metricsHtml = metrics.map(metric => {
+                    const rawValueKey = getRawValueKey(metric.key);
+                    const rawValue = company[rawValueKey];
+                    const rawFormatted = formatRawValue(rawValue, metric.key);
+                    const percentileValue = typeof metric.value === 'number' ? Math.round(metric.value * 100) + '%' : metric.value;
+                    
+                    // Remove "Percentile" suffix from label if it exists
+                    let metricLabel = metric.label.replace(/\s*Percentile\s*$/i, '');
+                    
+                    return `
+                        <div class="metric-card">
+                            <div class="metric-label">${metricLabel}</div>
+                            <div class="metric-fields">
+                                <div class="metric-field percentile">
+                                    <span class="metric-field-label">Percentile:</span>
+                                    <span class="metric-field-value">${percentileValue}</span>
+                                </div>
+                                ${rawValue !== null && rawValue !== undefined ? `
+                                <div class="metric-field">
+                                    <span class="metric-field-label">Value:</span>
+                                    <span class="metric-field-value">${rawFormatted}</span>
+                                </div>
+                                ` : ''}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                document.getElementById('modalBody').innerHTML = `
+                    ${totalScoreHtml}
+                    <div class="metric-grid">
+                        ${metricsHtml}
+                    </div>
+                `;
+
+                document.getElementById('companyModal').style.display = 'block';
+            } catch (error) {
+                console.error('Error loading company details:', error);
+                alert('Error loading company details');
+            }
+        }
+
+        function closeModal() {
+            document.getElementById('companyModal').style.display = 'none';
+        }
+
+        // Check if QuickFS metrics are available in the data
+        function checkQuickFSMetricsAvailability() {
+            if (allCompanies.length === 0) return;
+            
+            const quickfsMetrics = allMetrics.filter(m => m.key.includes('_quickfs'));
+            const missingMetrics = [];
+            
+            quickfsMetrics.forEach(metric => {
+                const hasData = allCompanies.some(company => {
+                    const value = company[metric.key];
+                    return value !== null && value !== undefined && !isNaN(value) && isFinite(value);
+                });
+                if (!hasData) {
+                    missingMetrics.push(metric.label);
+                }
+            });
+            
+            // Show warning if QuickFS metrics are selected but missing
+            const warningDiv = document.getElementById('quickfsWarning');
+            if (missingMetrics.length > 0 && enabledMetrics.has(quickfsMetrics.find(m => !allCompanies.some(c => c[m.key] !== null && c[m.key] !== undefined && !isNaN(c[m.key])))?.key)) {
+                if (!warningDiv) {
+                    const metricsHeader = document.querySelector('.metrics-selector-header');
+                    if (metricsHeader) {
+                        const warning = document.createElement('div');
+                        warning.id = 'quickfsWarning';
+                        warning.style.cssText = 'background: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; padding: 10px; margin-top: 10px; color: #856404;';
+                        warning.innerHTML = '<strong>⚠️ QuickFS Metrics Not Available:</strong> Some QuickFS metrics are selected but no data is available. Run <code>python3 quickfs/calculate_all_metrics.py</code> to calculate them.';
+                        metricsHeader.parentNode.insertBefore(warning, metricsHeader.nextSibling);
+                    }
+                } else {
+                    warningDiv.style.display = 'block';
+                }
+            } else if (warningDiv) {
+                warningDiv.style.display = 'none';
+            }
+        }
+
+        // Initialize metrics selector
+        function initializeMetricsSelector() {
+            const grid = document.getElementById('metricsToggleGrid');
+            grid.innerHTML = allMetrics.map(metric => {
+                const checkboxId = `metric-${metric.key}`;
+                return `
+                    <div class="metric-toggle active" data-metric-key="${metric.key}">
+                        <input type="checkbox" id="${checkboxId}" checked>
+                        <label class="metric-toggle-label" for="${checkboxId}">${metric.label}</label>
+                    </div>
+                `;
+            }).join('');
+            
+            // Initialize all metrics as enabled (since they're all checked by default)
+            allMetrics.forEach(metric => {
+                enabledMetrics.add(metric.key);
+            });
+            
+            // Add event listeners to containers for better responsiveness
+            allMetrics.forEach(metric => {
+                const checkbox = document.getElementById(`metric-${metric.key}`);
+                const toggle = checkbox.closest('.metric-toggle');
+                
+                // Handle toggle on the entire container div
+                const handleToggle = (e) => {
+                    // Always toggle checkbox state
+                    checkbox.checked = !checkbox.checked;
+                    
+                    // Update enabled metrics set and visual state synchronously
+                    if (checkbox.checked) {
+                        enabledMetrics.add(metric.key);
+                        toggle.classList.add('active');
+                    } else {
+                        enabledMetrics.delete(metric.key);
+                        toggle.classList.remove('active');
+                    }
+                    
+                    // Update toggle all button text
+                    updateToggleAllButtonText();
+                    
+                    // Reset sort to total_score descending when metrics change
+                    currentSort = 'total_score';
+                    currentOrder = 'desc';
+                    
+                    // Check QuickFS metrics availability when toggling
+                    checkQuickFSMetricsAvailability();
+                    
+                    // Debounced render to prevent lag during rapid clicks
+                    debouncedRenderTable();
+                };
+                
+                // Add click handler to the entire toggle container
+                toggle.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleToggle(e);
+                });
+            });
+            
+            // Update toggle all button text after initialization
+            updateToggleAllButtonText();
+            
+            // Check QuickFS metrics availability after companies are loaded
+            if (allCompanies.length > 0) {
+                checkQuickFSMetricsAvailability();
+            }
+        }
+
+        // Toggle all metrics (select all if any are deselected, deselect all if all are selected)
+        function toggleAllMetrics() {
+            const allSelected = allMetrics.every(metric => enabledMetrics.has(metric.key));
+            const shouldSelect = !allSelected;
+            
+            allMetrics.forEach(metric => {
+                const checkbox = document.getElementById(`metric-${metric.key}`);
+                const toggle = checkbox.closest('.metric-toggle');
+                checkbox.checked = shouldSelect;
+                if (shouldSelect) {
+                    enabledMetrics.add(metric.key);
+                    toggle.classList.add('active');
+                } else {
+                    enabledMetrics.delete(metric.key);
+                    toggle.classList.remove('active');
+                }
+            });
+            
+            // Update button text
+            updateToggleAllButtonText();
+            
+            // Reset sort to total_score descending when metrics change
+            currentSort = 'total_score';
+            currentOrder = 'desc';
+            // Use immediate render for select all/deselect all
+            renderTable();
+        }
+        
+        // Update the toggle button text based on current state
+        function updateToggleAllButtonText() {
+            const toggleButton = document.getElementById('toggleAllButton');
+            if (toggleButton) {
+                const allSelected = allMetrics.every(metric => enabledMetrics.has(metric.key));
+                toggleButton.textContent = allSelected ? 'Deselect All' : 'Select All';
+            }
+        }
+
+        // Event listeners
+        document.getElementById('searchInput').addEventListener('input', debounce(loadCompanies, 300));
+        
+        // Initialize metrics selector on page load
+        initializeMetricsSelector();
+        
+        // Initialize configuration dropdown on page load
+        updateConfigDropdown();
+        
+        // Set initial sort indicator
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.classList.remove('sort-asc', 'sort-desc');
+            if (th.dataset.sort === currentSort) {
+                th.classList.add(currentOrder === 'desc' ? 'sort-desc' : 'sort-asc');
+            }
+        });
+
+        // Sortable headers - toggle sort direction when clicking same column, or switch to new column
+        document.querySelectorAll('.sortable').forEach(th => {
+            th.addEventListener('click', () => {
+                const sortColumn = th.dataset.sort;
+                if (currentSort === sortColumn) {
+                    // Toggle sort direction for same column
+                    currentOrder = currentOrder === 'desc' ? 'asc' : 'desc';
+                } else {
+                    // Switch to new column, default to descending
+                    currentSort = sortColumn;
+                    currentOrder = 'desc';
+                }
+                renderTable();
+            });
+        });
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('companyModal');
+            if (event.target == modal) {
+                closeModal();
+            }
+        }
+
+        // Debounce function
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        // Initial load
+        loadCompanies();
+    </script>
+</body>
+</html>
+
