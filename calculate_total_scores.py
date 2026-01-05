@@ -95,125 +95,133 @@ def convert_recommendation_to_score(recommendation_val):
 
 def get_overlapping_companies():
     """
-    Get companies from all available databases (AI scores, Finviz, QuickFS).
+    Get companies that exist in ALL three databases (AI scores, Finviz, QuickFS).
     Returns a DataFrame with all metrics data.
+    Only includes stocks that have data in all three databases.
     """
-    # Load AI scores (optional)
-    df_ai = pd.DataFrame()
-    if os.path.exists(AI_SCORES_DB):
-        conn_ai = sqlite3.connect(AI_SCORES_DB)
-        cursor_ai = conn_ai.cursor()
-        
-        # Check if table exists
-        cursor_ai.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scores'")
-        table_exists = cursor_ai.fetchone() is not None
-        
-        if table_exists:
-            query_ai = """
-                SELECT *
-                FROM scores
-                WHERE id IN (
-                    SELECT MAX(id)
-                    FROM scores
-                    GROUP BY ticker
-                )
-            """
-            df_ai = pd.read_sql_query(query_ai, conn_ai)
-        
+    # Check that all databases exist
+    if not os.path.exists(AI_SCORES_DB):
+        print(f"Error: AI scores database not found at {AI_SCORES_DB}")
+        return None
+    
+    if not os.path.exists(FINVIZ_DB):
+        print(f"Error: Finviz database not found at {FINVIZ_DB}")
+        return None
+    
+    if not os.path.exists(QUICKFS_METRICS_DB):
+        print(f"Error: QuickFS metrics database not found at {QUICKFS_METRICS_DB}")
+        return None
+    
+    # Load AI scores
+    conn_ai = sqlite3.connect(AI_SCORES_DB)
+    cursor_ai = conn_ai.cursor()
+    
+    cursor_ai.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='scores'")
+    ai_table_exists = cursor_ai.fetchone() is not None
+    
+    if not ai_table_exists:
         conn_ai.close()
+        print(f"Error: 'scores' table not found in {AI_SCORES_DB}")
+        return None
+    
+    query_ai = """
+        SELECT *
+        FROM scores
+        WHERE id IN (
+            SELECT MAX(id)
+            FROM scores
+            GROUP BY ticker
+        )
+    """
+    df_ai = pd.read_sql_query(query_ai, conn_ai)
+    conn_ai.close()
+    
+    if len(df_ai) == 0:
+        print("Error: No data found in AI scores database")
+        return None
     
     # Load Finviz metrics
-    df_finviz = pd.DataFrame()
-    if os.path.exists(FINVIZ_DB):
-        conn_finviz = sqlite3.connect(FINVIZ_DB)
-        cursor_finviz = conn_finviz.cursor()
-        
-        # Check if table exists
-        cursor_finviz.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='short_interest'")
-        finviz_table_exists = cursor_finviz.fetchone() is not None
-        
-        if finviz_table_exists:
-            query_finviz = """
-                SELECT ticker, short_interest_percent, forward_pe, eps_growth_next_5y,
-                       insider_ownership, roa, roic, gross_margin, operating_margin,
-                       perf_10y, recommendation, price_move_percent
-                FROM short_interest
-                WHERE error IS NULL
-            """
-            
-            df_finviz = pd.read_sql_query(query_finviz, conn_finviz)
-            
-            # Convert recommendation text to numeric score
-            df_finviz['recommendation_score'] = df_finviz['recommendation'].apply(convert_recommendation_to_score)
-        
+    conn_finviz = sqlite3.connect(FINVIZ_DB)
+    cursor_finviz = conn_finviz.cursor()
+    
+    cursor_finviz.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='short_interest'")
+    finviz_table_exists = cursor_finviz.fetchone() is not None
+    
+    if not finviz_table_exists:
         conn_finviz.close()
+        print(f"Error: 'short_interest' table not found in {FINVIZ_DB}")
+        return None
+    
+    query_finviz = """
+        SELECT ticker, short_interest_percent, forward_pe, eps_growth_next_5y,
+               insider_ownership, roa, roic, gross_margin, operating_margin,
+               perf_10y, recommendation, price_move_percent
+        FROM short_interest
+        WHERE error IS NULL
+    """
+    df_finviz = pd.read_sql_query(query_finviz, conn_finviz)
+    conn_finviz.close()
+    
+    if len(df_finviz) == 0:
+        print("Error: No data found in Finviz database")
+        return None
+    
+    # Convert recommendation text to numeric score
+    df_finviz['recommendation_score'] = df_finviz['recommendation'].apply(convert_recommendation_to_score)
     
     # Load QuickFS metrics
-    df_quickfs = pd.DataFrame()
-    if os.path.exists(QUICKFS_METRICS_DB):
-        conn_quickfs = sqlite3.connect(QUICKFS_METRICS_DB)
-        cursor_quickfs = conn_quickfs.cursor()
-        
-        # Check if table exists
-        cursor_quickfs.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quickfs_metrics'")
-        quickfs_table_exists = cursor_quickfs.fetchone() is not None
-        
-        if quickfs_table_exists:
-            query_quickfs = """
-                SELECT ticker, revenue_5y_cagr, revenue_5y_halfway_growth, revenue_growth_consistency,
-                       revenue_growth_acceleration, operating_margin_growth, gross_margin_growth,
-                       operating_margin_consistency, gross_margin_consistency, share_count_halfway_growth,
-                       ttm_ebit_ppe, net_debt_to_ttm_operating_income, total_past_return
-                FROM quickfs_metrics
-                WHERE id IN (
-                    SELECT MAX(id) FROM quickfs_metrics GROUP BY ticker
-                )
-                AND error IS NULL
-            """
-            
-            df_quickfs = pd.read_sql_query(query_quickfs, conn_quickfs)
-        
+    conn_quickfs = sqlite3.connect(QUICKFS_METRICS_DB)
+    cursor_quickfs = conn_quickfs.cursor()
+    
+    cursor_quickfs.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='quickfs_metrics'")
+    quickfs_table_exists = cursor_quickfs.fetchone() is not None
+    
+    if not quickfs_table_exists:
         conn_quickfs.close()
-    
-    # Collect all tickers from all sources
-    all_tickers = set()
-    if len(df_ai) > 0:
-        all_tickers.update(df_ai['ticker'])
-    if len(df_finviz) > 0:
-        all_tickers.update(df_finviz['ticker'])
-    if len(df_quickfs) > 0:
-        all_tickers.update(df_quickfs['ticker'])
-    
-    if len(all_tickers) == 0:
-        print("No companies found in any database.")
+        print(f"Error: 'quickfs_metrics' table not found in {QUICKFS_METRICS_DB}")
         return None
     
-    # Start with the source that has the most data, or AI scores if available
-    if len(df_ai) > 0:
-        df_merged = df_ai[df_ai['ticker'].isin(all_tickers)].copy()
-    elif len(df_finviz) > 0:
-        df_merged = df_finviz[df_finviz['ticker'].isin(all_tickers)].copy()
-        # Add company_name column if missing (set to ticker)
-        if 'company_name' not in df_merged.columns:
-            df_merged['company_name'] = df_merged['ticker']
-    elif len(df_quickfs) > 0:
-        df_merged = df_quickfs[df_quickfs['ticker'].isin(all_tickers)].copy()
-        # Add company_name column if missing (set to ticker)
-        if 'company_name' not in df_merged.columns:
-            df_merged['company_name'] = df_merged['ticker']
-    else:
+    query_quickfs = """
+        SELECT ticker, revenue_5y_cagr, revenue_5y_halfway_growth, revenue_growth_consistency,
+               revenue_growth_acceleration, operating_margin_growth, gross_margin_growth,
+               operating_margin_consistency, gross_margin_consistency, share_count_halfway_growth,
+               ttm_ebit_ppe, net_debt_to_ttm_operating_income, total_past_return
+        FROM quickfs_metrics
+        WHERE id IN (
+            SELECT MAX(id) FROM quickfs_metrics GROUP BY ticker
+        )
+    """
+    df_quickfs = pd.read_sql_query(query_quickfs, conn_quickfs)
+    conn_quickfs.close()
+    
+    if len(df_quickfs) == 0:
+        print("Error: No data found in QuickFS metrics database")
         return None
     
-    # Merge other data sources (use left join to preserve all tickers from base dataframe)
-    if len(df_finviz) > 0:
-        finviz_cols = [c for c in df_finviz.columns if c not in df_merged.columns or c == 'ticker']
-        if len(finviz_cols) > 1:  # More than just 'ticker'
-            df_merged = df_merged.merge(df_finviz[finviz_cols], on='ticker', how='left')
+    # Find intersection of tickers (stocks that exist in ALL three databases)
+    tickers_ai = set(df_ai['ticker'])
+    tickers_finviz = set(df_finviz['ticker'])
+    tickers_quickfs = set(df_quickfs['ticker'])
     
-    if len(df_quickfs) > 0:
-        quickfs_cols = [c for c in df_quickfs.columns if c not in df_merged.columns or c == 'ticker']
-        if len(quickfs_cols) > 1:  # More than just 'ticker'
-            df_merged = df_merged.merge(df_quickfs[quickfs_cols], on='ticker', how='left')
+    overlapping_tickers = tickers_ai & tickers_finviz & tickers_quickfs
+    
+    if len(overlapping_tickers) == 0:
+        print("Error: No companies found that exist in all three databases")
+        print(f"  AI scores: {len(tickers_ai)} tickers")
+        print(f"  Finviz: {len(tickers_finviz)} tickers")
+        print(f"  QuickFS: {len(tickers_quickfs)} tickers")
+        return None
+    
+    print(f"Found {len(overlapping_tickers)} companies that exist in all three databases")
+    
+    # Start with AI scores and merge with inner joins to ensure only overlapping tickers
+    df_merged = df_ai[df_ai['ticker'].isin(overlapping_tickers)].copy()
+    
+    # Merge Finviz data (inner join - only keep tickers that exist in both)
+    df_merged = df_merged.merge(df_finviz, on='ticker', how='inner')
+    
+    # Merge QuickFS data (inner join - only keep tickers that exist in both)
+    df_merged = df_merged.merge(df_quickfs, on='ticker', how='inner')
     
     # Ensure company_name exists (use ticker if missing)
     if 'company_name' not in df_merged.columns:
@@ -557,22 +565,23 @@ def save_results(df_scores):
 def main():
     """Main function."""
     print("Loading data from databases...")
+    print("(Only including stocks that exist in ALL three databases: AI scores, Finviz, QuickFS)")
     
-    # Get overlapping companies
+    # Get overlapping companies (must exist in all three databases)
     df = get_overlapping_companies()
     
     if df is None or len(df) == 0:
-        print("\nCannot proceed: No data available from any database.")
+        print("\nCannot proceed: No companies found in all three databases.")
         return
     
-    print(f"Found {len(df)} companies with data")
+    print(f"Processing {len(df)} companies with data from all three databases")
     
-    # Get all score columns (optional - only if AI scores exist)
+    # Get all score columns (should exist since we require AI scores)
     score_columns = get_ai_score_columns()
     if score_columns:
         print(f"Found {len(score_columns)} AI score metrics")
     else:
-        print("No AI score metrics found (will use Finviz and QuickFS metrics only)")
+        print("Warning: No AI score metrics found")
     
     # Normalize AI scores (0-10 to 0-1, handle reverse metrics)
     print("\nNormalizing AI scores...")

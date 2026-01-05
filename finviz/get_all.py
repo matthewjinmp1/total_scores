@@ -42,7 +42,7 @@ def init_short_interest_db():
     
     if not table_exists:
         # Create new table with all columns
-        cursor.execute('''
+    cursor.execute('''
             CREATE TABLE short_interest (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             ticker TEXT UNIQUE NOT NULL,
@@ -60,7 +60,7 @@ def init_short_interest_db():
             scraped_at TEXT,
             error TEXT
         )
-        ''')
+    ''')
     else:
         # Table exists - add missing columns if needed
         new_columns = {
@@ -483,17 +483,17 @@ def main():
             
             try:
                 data = future.result()
-                save_short_interest_data(data)
-                
-                if data.get('error'):
-                    if '429' in str(data['error']) or 'Rate limit' in str(data['error']):
+        save_short_interest_data(data)
+        
+        if data.get('error'):
+            if '429' in str(data['error']) or 'Rate limit' in str(data['error']):
                         rate_limited_tickers.append(ticker)
                         print(f"[{completed}/{len(tickers_to_scrape)}] {ticker}: ✗ Rate limited")
                         errors += 1
-                    else:
+            else:
                         print(f"[{completed}/{len(tickers_to_scrape)}] {ticker}: ✗ {data['error']}")
-                        errors += 1
-                else:
+            errors += 1
+        else:
                     metrics_found = sum([
                         1 for key in ['short_interest_percent', 'forward_pe', 'eps_growth_next_5y',
                                      'insider_ownership', 'roa', 'roic', 'gross_margin',
@@ -544,7 +544,7 @@ def main():
                         else:
                             print(f"  {ticker}: ✗ {data['error']}")
                             retry_errors += 1
-                    else:
+            else:
                         metrics_found = sum([
                             1 for key in ['short_interest_percent', 'forward_pe', 'eps_growth_next_5y',
                                          'insider_ownership', 'roa', 'roic', 'gross_margin',
@@ -554,7 +554,7 @@ def main():
                         ])
                         print(f"  {ticker}: ✓ {metrics_found} metrics")
                         retry_successful += 1
-                        successful += 1
+            successful += 1
                         errors -= 1  # Correct the count since we're retrying
                 except Exception as e:
                     print(f"  {ticker}: ✗ Exception: {str(e)}")
