@@ -12,6 +12,7 @@ import pandas as pd
 AI_SCORES_DB = os.path.join(os.path.dirname(__file__), "ai_scores.db")
 FINVIZ_DB = os.path.join(os.path.dirname(__file__), "finviz", "finviz.db")
 QUICKFS_METRICS_DB = os.path.join(os.path.dirname(__file__), "quickfs", "metrics.db")
+DATAROMA_METRICS_DB = os.path.join(os.path.dirname(__file__), "dataroma", "metrics.db")
 
 # Metrics that need to be reversed (lower is better, so we flip them)
 REVERSE_METRICS = [
@@ -30,6 +31,12 @@ QUICKFS_REVERSE_METRICS = [
     'gross_margin_consistency',
     'share_count_halfway_growth',
     'net_debt_to_ttm_operating_income'
+]
+
+# Dataroma metrics that need to be reversed (lower is better)
+# price_move_percent: negative means price is above holding price (good), positive means below (bad)
+DATAROMA_REVERSE_METRICS = [
+    'price_move_percent'
 ]
 
 def get_ai_score_columns():
@@ -95,9 +102,9 @@ def convert_recommendation_to_score(recommendation_val):
 
 def get_overlapping_companies():
     """
-    Get companies that exist in ALL three databases (AI scores, Finviz, QuickFS).
+    Get companies that exist in ALL four databases (AI scores, Finviz, QuickFS, Dataroma).
     Returns a DataFrame with all metrics data.
-    Only includes stocks that have data in all three databases.
+    Only includes stocks that have data in all four databases.
     """
     # Check that all databases exist
     if not os.path.exists(AI_SCORES_DB):
@@ -110,6 +117,10 @@ def get_overlapping_companies():
     
     if not os.path.exists(QUICKFS_METRICS_DB):
         print(f"Error: QuickFS metrics database not found at {QUICKFS_METRICS_DB}")
+        return None
+    
+    if not os.path.exists(DATAROMA_METRICS_DB):
+        print(f"Error: Dataroma metrics database not found at {DATAROMA_METRICS_DB}")
         return None
     
     # Load AI scores
@@ -155,7 +166,7 @@ def get_overlapping_companies():
     query_finviz = """
         SELECT ticker, short_interest_percent, forward_pe, eps_growth_next_5y,
                insider_ownership, roa, roic, gross_margin, operating_margin,
-               perf_10y, recommendation, price_move_percent
+               perf_10y, recommendation
         FROM short_interest
         WHERE error IS NULL
     """
@@ -198,21 +209,52 @@ def get_overlapping_companies():
         print("Error: No data found in QuickFS metrics database")
         return None
     
-    # Find intersection of tickers (stocks that exist in ALL three databases)
+    # Load Dataroma metrics
+    conn_dataroma = sqlite3.connect(DATAROMA_METRICS_DB)
+    cursor_dataroma = conn_dataroma.cursor()
+    
+    cursor_dataroma.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='dataroma_metrics'")
+    dataroma_table_exists = cursor_dataroma.fetchone() is not None
+    
+    if not dataroma_table_exists:
+        conn_dataroma.close()
+        print(f"Error: 'dataroma_metrics' table not found in {DATAROMA_METRICS_DB}")
+        return None
+    
+    query_dataroma = """
+        SELECT ticker, ownership_count, portfolio_percent, price_move_percent,
+               net_buys, net_dollars_percent_of_market_cap
+        FROM dataroma_metrics
+        WHERE scraped_at = (
+            SELECT MAX(scraped_at)
+            FROM dataroma_metrics d2
+            WHERE d2.ticker = dataroma_metrics.ticker
+        )
+    """
+    df_dataroma = pd.read_sql_query(query_dataroma, conn_dataroma)
+    conn_dataroma.close()
+    
+    if len(df_dataroma) == 0:
+        print("Error: No data found in Dataroma metrics database")
+        return None
+    
+    # Find intersection of tickers (stocks that exist in ALL four databases)
     tickers_ai = set(df_ai['ticker'])
     tickers_finviz = set(df_finviz['ticker'])
     tickers_quickfs = set(df_quickfs['ticker'])
+    tickers_dataroma = set(df_dataroma['ticker'])
     
-    overlapping_tickers = tickers_ai & tickers_finviz & tickers_quickfs
+    overlapping_tickers = tickers_ai & tickers_finviz & tickers_quickfs & tickers_dataroma
     
     if len(overlapping_tickers) == 0:
-        print("Error: No companies found that exist in all three databases")
+        print("Error: No companies found that exist in all four databases")
         print(f"  AI scores: {len(tickers_ai)} tickers")
         print(f"  Finviz: {len(tickers_finviz)} tickers")
         print(f"  QuickFS: {len(tickers_quickfs)} tickers")
+        print(f"  Dataroma: {len(tickers_dataroma)} tickers")
         return None
     
-    print(f"Found {len(overlapping_tickers)} companies that exist in all three databases")
+    print(f"Found {len(overlapping_tickers)} companies that exist in all four databases")
     
     # Start with AI scores and merge with inner joins to ensure only overlapping tickers
     df_merged = df_ai[df_ai['ticker'].isin(overlapping_tickers)].copy()
@@ -222,6 +264,9 @@ def get_overlapping_companies():
     
     # Merge QuickFS data (inner join - only keep tickers that exist in both)
     df_merged = df_merged.merge(df_quickfs, on='ticker', how='inner')
+    
+    # Merge Dataroma data (inner join - only keep tickers that exist in both)
+    df_merged = df_merged.merge(df_dataroma, on='ticker', how='inner')
     
     # Ensure company_name exists (use ticker if missing)
     if 'company_name' not in df_merged.columns:
@@ -312,8 +357,8 @@ def calculate_total_scores(df_normalized, score_columns):
         'roic',
         'gross_margin',
         'operating_margin',
-        'perf_10y',
-        'price_move_percent'
+        'perf_10y'
+        # Note: price_move_percent is now from Dataroma, not Finviz
     ]
     
     # Finviz metrics - lower is better (reverse percentile)
@@ -373,10 +418,36 @@ def calculate_total_scores(df_normalized, score_columns):
                 df_scores[metric],
                 reverse=is_reverse
             )
+            # Assign 0.5 percentile for null values
+            df_scores[percentile_col] = df_scores[percentile_col].fillna(0.5)
             quickfs_percentile_cols.append(percentile_col)
     
-    # Combine all metrics (AI normalized + finviz percentiles + quickfs percentiles)
-    all_metrics = normalized_cols + finviz_percentile_cols + quickfs_percentile_cols
+    # Dataroma metrics - all the metrics we want to include
+    dataroma_metrics_list = [
+        'ownership_count',
+        'portfolio_percent',
+        'price_move_percent',
+        'net_buys',
+        'net_dollars_percent_of_market_cap'
+    ]
+    
+    # Calculate percentiles for Dataroma metrics
+    dataroma_percentile_cols = []
+    
+    for metric in dataroma_metrics_list:
+        if metric in df_scores.columns:
+            is_reverse = metric in DATAROMA_REVERSE_METRICS
+            percentile_col = f'{metric}_percentile'
+            df_scores[percentile_col] = calculate_percentile_score(
+                df_scores[metric],
+                reverse=is_reverse
+            )
+            # Assign 0.5 percentile for null values
+            df_scores[percentile_col] = df_scores[percentile_col].fillna(0.5)
+            dataroma_percentile_cols.append(percentile_col)
+    
+    # Combine all metrics (AI normalized + finviz percentiles + quickfs percentiles + dataroma percentiles)
+    all_metrics = normalized_cols + finviz_percentile_cols + quickfs_percentile_cols + dataroma_percentile_cols
     
     # Calculate total score as average of all normalized metrics
     # Handle NaN values by only averaging non-NaN values
@@ -506,7 +577,12 @@ def display_results(df_scores):
                 'eps_growth_next_5y_percentile', 'insider_ownership_percentile',
                 'roa_percentile', 'roic_percentile', 'gross_margin_percentile',
                 'operating_margin_percentile', 'perf_10y_percentile',
-                'recommendation_score_percentile', 'price_move_percent_percentile'
+                'recommendation_score_percentile'
+            ],
+            'Dataroma Metrics': [
+                'ownership_count_percentile', 'portfolio_percent_percentile',
+                'price_move_percent_percentile', 'net_buys_percentile',
+                'net_dollars_percent_of_market_cap_percentile'
             ]
         }
         

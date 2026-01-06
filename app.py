@@ -81,6 +81,12 @@ def get_companies():
         'ttm_ebit_ppe', 'net_debt_to_ttm_operating_income', 'total_past_return'
     ]
     
+    # Dataroma metrics are stored in all_scores.db with _percentile suffix but frontend expects _dataroma
+    dataroma_metrics_base = [
+        'ownership_count', 'portfolio_percent', 'price_move_percent',
+        'net_buys', 'net_dollars_percent_of_market_cap'
+    ]
+    
     result = []
     for row in companies:
         company_dict = dict(row)
@@ -96,6 +102,18 @@ def get_companies():
             else:
                 # Metric not in database, assign 0.5
                 company_dict[quickfs_key] = 0.5
+        
+        # Map Dataroma metrics from _percentile suffix to _dataroma suffix (for frontend compatibility)
+        for metric_base in dataroma_metrics_base:
+            percentile_key = f'{metric_base}_percentile'
+            dataroma_key = f'{metric_base}_dataroma'
+            if percentile_key in company_dict:
+                # Use percentile value, or 0.5 if None/NaN
+                value = company_dict[percentile_key]
+                company_dict[dataroma_key] = 0.5 if value is None or pd.isna(value) else value
+            else:
+                # Metric not in database, assign 0.5
+                company_dict[dataroma_key] = 0.5
         
         result.append(company_dict)
     
@@ -190,6 +208,24 @@ def get_company(ticker):
         else:
             # Metric not in database, assign 0.5
             company_dict[quickfs_key] = 0.5
+    
+    # Dataroma metrics are already in all_scores.db with _percentile suffix
+    # Map them to _dataroma suffix for frontend compatibility
+    dataroma_metrics_base = [
+        'ownership_count', 'portfolio_percent', 'price_move_percent',
+        'net_buys', 'net_dollars_percent_of_market_cap'
+    ]
+    
+    for metric_base in dataroma_metrics_base:
+        percentile_key = f'{metric_base}_percentile'
+        dataroma_key = f'{metric_base}_dataroma'
+        if percentile_key in company_dict:
+            # Use percentile value, or 0.5 if None/NaN
+            value = company_dict[percentile_key]
+            company_dict[dataroma_key] = 0.5 if value is None or pd.isna(value) else value
+        else:
+            # Metric not in database, assign 0.5
+            company_dict[dataroma_key] = 0.5
     
     return jsonify(company_dict)
 
